@@ -10,6 +10,7 @@ var db = require('../db')
 var github = require('../sources/github')
 var slack = require('../notifications/slack')
 var sns = require('../notifications/sns')
+var autoscaling = require('../utils/autoscaling')()
 
 var ecs = new AWS.ECS()
 
@@ -219,6 +220,8 @@ function dockerBuild(build, cb) {
   var ECS_CLUSTER = build.config.docker.cluster || config.STACK
   var ECS_TASK_DEFINITION = build.config.docker.task || `${config.STACK}-BuildTask`
   var ECS_CONTAINER = build.config.docker.container || 'build'
+  var AS_GROUP_NAME = build.config.docker.autoscaling_group;
+  var AS_DESIRED_CAPACITY = build.config.docker.autoscaling_up_capacity || 1;
 
   build.config = prepareDockerConfig(build.config)
 
@@ -239,11 +242,22 @@ function dockerBuild(build, cb) {
   // On permission failure:
   // {"failures":[{"arn":"arn:aws:ecs:us-east-1:999000111222:container-instance/e79f47fe-8354-4a8c-b37c-15a24ad27895","reason":"AGENT"}],"tasks":[]}
 
-  return ecs.runTask({
-    cluster: ECS_CLUSTER,
-    taskDefinition: ECS_TASK_DEFINITION,
-    overrides: {containerOverrides: [containerOverrides]},
-  }, cb)
+  return autoscaling.startEcsContainer({
+    AutoScalingGroupName: AS_GROUP_NAME,
+    DesiredCapacity: AS_DESIRED_CAPACITY,
+    Cluster: ECS_CLUSTER
+  }, function (err) {
+    if (err) { 
+      log.error(`Error starting ECS cluster: ${err}`)
+      cb(err)
+    } else {
+      ecs.runTask({
+        cluster: ECS_CLUSTER,
+        taskDefinition: ECS_TASK_DEFINITION,
+        overrides: {containerOverrides: [containerOverrides]},
+      }, cb)
+    }
+  })
 }
 
 // For when executing under Lambda (but not ECS/Docker)
