@@ -220,8 +220,8 @@ function dockerBuild(build, cb) {
   var ECS_CLUSTER = build.config.docker.cluster || config.STACK
   var ECS_TASK_DEFINITION = build.config.docker.task || `${config.STACK}-BuildTask`
   var ECS_CONTAINER = build.config.docker.container || 'build'
-  var AS_GROUP_NAME = build.config.docker.autoscaling_group;
-  var AS_DESIRED_CAPACITY = build.config.docker.autoscaling_up_capacity || 1;
+  var AS_GROUP_NAME = build.config.docker.autoscalingGroup;
+  var AS_DESIRED_CAPACITY = build.config.docker.autoscalingUpCapacityCount || 1;
 
   build.config = prepareDockerConfig(build.config)
 
