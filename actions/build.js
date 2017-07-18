@@ -236,10 +236,9 @@ function dockerBuild(build, cb) {
   }
   if (cmd) containerOverrides.command = ['bash', '-c', cmd]
 
-  log.info(`Running task ${ECS_TASK_DEFINITION}${cmd ? ` with cmd ${cmd}` : ''} on ECS cluster ${ECS_CLUSTER}`)
-
   // On permission failure:
   // {"failures":[{"arn":"arn:aws:ecs:us-east-1:999000111222:container-instance/e79f47fe-8354-4a8c-b37c-15a24ad27895","reason":"AGENT"}],"tasks":[]}
+  log.info(`Ensuring that the target cluster ${ECS_CLUSTER} has running containers...`)
 
   return autoscaling.startEcsContainer({
     AutoScalingGroupName: AS_GROUP_NAME,
@@ -250,6 +249,8 @@ function dockerBuild(build, cb) {
       log.error(`Error starting ECS cluster: ${err}`)
       cb(err)
     } else {
+      log.info(`Running task ${ECS_TASK_DEFINITION}${cmd ? ` with cmd ${cmd}` : ''} on ECS cluster ${ECS_CLUSTER}`)
+
       ecs.runTask({
         cluster: ECS_CLUSTER,
         taskDefinition: ECS_TASK_DEFINITION,
