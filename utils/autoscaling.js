@@ -3,8 +3,8 @@ var async = require('async')
 var log = require('./log')
 
 module.exports = function autoscaling(AwsAutoscaling, AwsEcs) {
-  var autoscaling = AwsAutoscaling || AWS.AutoScaling()
-  var ecs = AwsEcs || AWS.ECS();
+  var autoscaling = AwsAutoscaling || new AWS.AutoScaling()
+  var ecs = AwsEcs || new AWS.ECS();
 
   function startEcsContainer(params, cb) {
     var AutoScalingGroupName = params.AutoScalingGroupName

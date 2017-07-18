@@ -10,9 +10,8 @@ var db = require('../db')
 var github = require('../sources/github')
 var slack = require('../notifications/slack')
 var sns = require('../notifications/sns')
-var autoscaling = require('../utils/autoscaling')()
-
 var ecs = new AWS.ECS()
+var autoscaling = require('../utils/autoscaling')(new AWS.AutoScaling(), ecs)
 
 module.exports = runBuild
 
