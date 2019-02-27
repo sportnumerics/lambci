@@ -40,15 +40,25 @@ Parameters:
     Default: '#general'
     AllowedPattern: '^$|^#.+'
     ConstraintDescription: 'Must be empty or a valid Slack channel, eg: #general'
+  EcsInstanceType:
+    Description: EC2 instance type (t2.micro, t2.medium, t2.large, etc)
+    Type: String
+    Default: t2.micro
+    ConstraintDescription: 'must be a valid EC2 instance type.'
 
-
-Resources:
-
-  # Uncomment this (and permissions below) to add an SNS topic to publish build statuses to:
-  # StatusTopic:
-    # Type: AWS::SNS::Topic
-    # Properties:
-      # DisplayName: LambCI
+Mappings:
+  EcsAmisByRegion:
+    us-east-1: {"ami": "ami-275ffe31"}
+    us-east-2: {"ami": "ami-62745007"}
+    us-west-1: {"ami": "ami-689bc208"}
+    us-west-2: {"ami": "ami-62d35c02"}
+    eu-west-1: {"ami": "ami-95f8d2f3"}
+    eu-west-2: {"ami": "ami-bf9481db"}
+    eu-central-1: {"ami": "ami-085e8a67"}
+    ap-northeast-1: {"ami": "ami-f63f6f91"}
+    ap-southeast-1: {"ami": "ami-b4ae1dd7"}
+    ap-southeast-2: {"ami": "ami-fbe9eb98"}
+    ca-central-1: {"ami": "ami-ee58e58a"}
 
   BuildLambda:
     Type: AWS::Serverless::Function
@@ -85,6 +95,29 @@ Resources:
               - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${BuildsTable}/index/*
         - LambdaInvokePolicy:
             FunctionName: !Sub ${AWS::StackName}-build
+        - Statement:
+            Effect: Allow
+            Action: ecs:RunTask
+            Resource:
+              Ref: BuildTask
+        - Statement:
+            Effect: Allow
+            Action: ecs:DescribeClusters
+            Resource:
+              Fn::Join:
+              - ''
+              - - arn:aws:ecs:*:*:cluster/
+                - Ref: Cluster
+        - Statement:
+            Effect: Allow
+            Action: autoscaling:SetDesiredCapacity
+            Resource:
+              Fn::Join:
+              - ''
+              - - arn:aws:autoscaling:*:*:autoScalingGroup:*:autoScalingGroupName/
+                - Ref: AutoScalingGroup
+        - Statement:
+
         # Uncomment this if you've added an SNS topic to publish to (above)
         # - SNSPublishMessagePolicy:
             # TopicName: !Ref StatusTopic
@@ -164,6 +197,148 @@ Resources:
       S3Bucket: !Ref BuildResults
       WebhookUrl: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/lambci/webhook
 
+  Cluster:
+    Type: AWS::ECS::Cluster
+
+  BuildTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+      - Name: build
+        Image: lambci/ecs
+        Memory: 450
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: EcsLogs
+            awslogs-region:
+              Ref: AWS::Region
+        Environment:
+        - Name: LOG_GROUP
+          Value:
+            Ref: EcsLogs
+        - Name: AWS_REGION
+          Value:
+            Ref: AWS::Region
+        MountPoints:
+        - SourceVolume: docker-socket
+          ContainerPath: "/var/run/docker.sock"
+      Volumes:
+      - Name: docker-socket
+        Host:
+          SourcePath: "/var/run/docker.sock"
+
+  EcsLogs:
+    Type: AWS::Logs::LogGroup
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones:
+        Fn::GetAZs: ''
+      LaunchConfigurationName:
+        Ref: LaunchConfig
+      DesiredCapacity: '1'
+      MinSize: '0'
+      MaxSize: '4'
+    CreationPolicy:
+      ResourceSignal:
+        Count: '1'
+
+  ScaleOffPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ExactCapacity
+      AutoScalingGroupName:
+        Ref: AutoScalingGroup
+      Cooldown: '1'
+      ScalingAdjustment: '0'
+
+  CPUUnderutilizedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '6'
+      Statistic: Maximum
+      Threshold: '5'
+      AlarmDescription: Alarm if CPU is never above 5% in an hour
+      Period: '600'
+      AlarmActions:
+      - Ref: ScaleOffPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value:
+          Ref: AutoScalingGroup
+      ComparisonOperator: LessThanOrEqualToThreshold
+      MetricName: CPUUtilization
+
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId:
+        Fn::FindInMap:
+        - EcsAmisByRegion
+        - Ref: AWS::Region
+        - ami
+      IamInstanceProfile:
+        Ref: InstanceProfile
+      InstanceType:
+        Ref: EcsInstanceType
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+          - ''
+          - - "#!/bin/bash\n"
+            - echo ECS_CLUSTER=
+            - Ref: Cluster
+            - " >> /etc/ecs/ecs.config\n"
+            - 'yum install -y aws-cfn-bootstrap
+
+  '
+            - "/opt/aws/bin/cfn-signal -e $? --resource AutoScalingGroup --stack "
+            - Ref: AWS::StackName
+            - " --region "
+            - Ref: AWS::Region
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: InstanceRole
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: RunEcs
+        PolicyDocument:
+          Statement:
+            Effect: Allow
+            Action:
+            - ecs:DeregisterContainerInstance
+            - ecs:DiscoverPollEndpoint
+            - ecs:Poll
+            - ecs:RegisterContainerInstance
+            - ecs:StartTelemetrySession
+            - ecs:Submit*
+            Resource: "*"
+      - PolicyName: WriteLogs
+        PolicyDocument:
+          Statement:
+            Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+
 
 Outputs:
 
@@ -174,4 +349,3 @@ Outputs:
   WebhookUrl:
     Description: GitHub webhook URL
     Value: !Sub https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/lambci/webhook
-
