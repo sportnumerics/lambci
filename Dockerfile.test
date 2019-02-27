@@ -2,7 +2,7 @@ FROM node:alpine
 
 WORKDIR /work
 
-RUN apk add --no-cache bash curl git py-pip openssl alpine-sdk
+RUN apk add --no-cache bash curl git py-pip openssl alpine-sdk python-dev
 
 RUN pip install --user aws-sam-cli
 
