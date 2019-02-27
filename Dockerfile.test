@@ -4,7 +4,7 @@ WORKDIR /work
 
 RUN apk add --no-cache bash curl git py-pip openssl alpine-sdk python-dev zip
 
-RUN pip install --user aws-sam-cli
+RUN pip install aws-sam-cli
 
 ADD . .
 
