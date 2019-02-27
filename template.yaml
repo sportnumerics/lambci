@@ -60,6 +60,8 @@ Mappings:
     ap-southeast-2: {"ami": "ami-fbe9eb98"}
     ca-central-1: {"ami": "ami-ee58e58a"}
 
+Resources:
+
   BuildLambda:
     Type: AWS::Serverless::Function
     Properties:
