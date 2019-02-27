@@ -1,5 +1,7 @@
 FROM alpine:3.9
 
-pip install --user aws-sam-cli
+RUN apk add --no-cache bash curl git docker py-pip
 
-S3_BUCKET=${LAMBCI_DEPLOYMENT_BUCKET:-lambci} npm run deploy
+RUN pip install --user aws-sam-cli
+
+CMD S3_BUCKET=${LAMBCI_DEPLOYMENT_BUCKET:-lambci} npm run deploy
