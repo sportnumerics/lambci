@@ -1,3 +1,11 @@
 {
-  "cmd": ". ~/init/gcc && pip install --user aws-sam-cli && npm run deploy"
+  "docker": {
+    "autoscalingGroup": "lambci-AutoScalingGroup-1NTJ0P7ZQT1CQ",
+    "cluster" : "lambci-Cluster-1DEWLHNDPMG7G",
+    "runArgs" : "-v /var/run/docker.sock:/var/run/docker.sock --ulimit nofile=262144:262144",
+    "task" : "lambci-BuildTask-1H70YQV2SMV96:1"
+  },
+  "env": {
+    "LAMBCI_DEPLOYMENT_BUCKET": "sportnumerics-lambci"
+  }
 }
